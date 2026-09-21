@@ -23,9 +23,33 @@ llm = ChatGroq(
 
 class TravelState(TypedDict):
     user_query: str
+    destination: str
     flight_results: str
     hotel_results: str
     itinerary: str
+
+
+# ============================================================
+# NEW: Extract clean destination city from user query
+# ============================================================
+
+def extract_destination(user_query: str) -> str:
+    prompt = f"""
+Extract ONLY the destination city/place name from this trip request.
+Return just the city name, nothing else. No extra words, no punctuation.
+
+Trip request: "{user_query}"
+
+City:"""
+
+    response = llm.invoke(prompt)
+    return response.content.strip()
+
+
+def destination_agent(state: TravelState):
+    return {
+        "destination": extract_destination(state["user_query"])
+    }
 
 
 def flight_agent(state: TravelState):
@@ -35,12 +59,27 @@ def flight_agent(state: TravelState):
 
 
 def hotel_agent(state: TravelState):
-    hotels = tavily_search(
-        f"best hotels in {state['user_query']}"
+    # FIX: use clean destination instead of full user_query
+    hotels_raw = tavily_search(
+        f"best hotels in {state['destination']}"
     )
 
+    # NEW: summarize raw search results into clean short points
+    summary_prompt = f"""
+Below is raw web search data about hotels in {state['destination']}.
+Extract ONLY 3-5 real hotel names with a 1-line description each.
+Remove ads, unrelated text, links, and noise.
+If no clear hotel names are found, say "No specific hotels found."
+
+Raw data:
+{hotels_raw}
+
+Clean hotel list:"""
+
+    cleaned = llm.invoke(summary_prompt)
+
     return {
-        "hotel_results": hotels
+        "hotel_results": cleaned.content.strip()
     }
 
 
@@ -85,11 +124,13 @@ Do not invent flight, hotel or price information.
 
 graph = StateGraph(TravelState)
 
+graph.add_node("destination", destination_agent)
 graph.add_node("flight", flight_agent)
 graph.add_node("hotel", hotel_agent)
 graph.add_node("itinerary", itinerary_agent)
 
-graph.add_edge(START, "flight")
+graph.add_edge(START, "destination")
+graph.add_edge("destination", "flight")
 graph.add_edge("flight", "hotel")
 graph.add_edge("hotel", "itinerary")
 graph.add_edge("itinerary", END)
@@ -111,6 +152,7 @@ def run_travel_agent(user_input: str, thread_id: str):
     result = travel_graph.invoke(
         {
             "user_query": user_input,
+            "destination": "",
             "flight_results": "",
             "hotel_results": "",
             "itinerary": ""
