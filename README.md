@@ -8,6 +8,10 @@ Plan a 3 day trip from Delhi to Dubai
 
 The application searches for flight information, searches the web for hotel information and generates a day-by-day travel itinerary.
 
+
+**Live Demo:** https://trip-planer-ai-s985.onrender.com
+> Free hosting sleeps when idle, so the first load can take about a minute.
+
 ## Features
 
 - Flight search using AviationStack API
